@@ -1,0 +1,23 @@
+syntax = "proto3";
+package authz_for_osmosis;
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/any.proto";
+
+message GenericAuthorization {
+  // Msg is actually the type URL
+  // It'll grant unrestricted permissions to execute
+  // An example: /cosmwasm.wasm.v1.MsgStoreCode
+  string msg = 1;
+}
+
+message Grant {
+  google.protobuf.Any       authorization = 1;
+  google.protobuf.Timestamp expiration    = 2;
+}
+
+message MsgGrant {
+  string granter = 1;
+  string grantee = 2;
+
+  Grant grant = 3;
+}
