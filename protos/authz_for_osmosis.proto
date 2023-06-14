@@ -3,6 +3,12 @@ package authz_for_osmosis;
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/any.proto";
 
+/* Cosmos
+See: https://github.com/cosmos/cosmos-sdk/blob/main/proto/cosmos/authz/v1beta1/authz.proto
+ */
+
+// GenericAuthorization gives the grantee unrestricted permissions to execute
+// the provided method on behalf of the granter's account.
 message GenericAuthorization {
   // Msg is actually the type URL
   // It'll grant unrestricted permissions to execute
@@ -10,14 +16,274 @@ message GenericAuthorization {
   string msg = 1;
 }
 
+// Grant gives permissions to execute
+// the provide method with expiration time.
 message Grant {
   google.protobuf.Any       authorization = 1;
   google.protobuf.Timestamp expiration    = 2;
 }
 
+// GrantAuthorization extends a grant with both the addresses of the grantee and granter.
+// It is used in genesis.proto and query.proto
+message GrantAuthorization {
+  string granter = 1;
+  string grantee = 2;
+
+  google.protobuf.Any       authorization = 3;
+  google.protobuf.Timestamp expiration    = 4;
+}
+
+// GrantQueueItem contains the list of TypeURL of a sdk.Msg.
+message GrantQueueItem {
+  // msg_type_urls contains the list of TypeURL of a sdk.Msg.
+  repeated string msg_type_urls = 1;
+}
+
+/*
+See: https://github.com/cosmos/cosmos-sdk/blob/main/proto/cosmos/authz/v1beta1/tx.proto
+ */
+
+// MsgGrant is a request type for Grant method. It declares authorization to the grantee
+// on behalf of the granter with the provided expiration time.
 message MsgGrant {
   string granter = 1;
   string grantee = 2;
 
   Grant grant = 3;
+}
+
+// MsgExecResponse defines the Msg/MsgExecResponse response type.
+message MsgExecResponse {
+  repeated bytes results = 1;
+}
+
+// MsgExec attempts to execute the provided messages using
+// authorizations granted to the grantee. Each message should have only
+// one signer corresponding to the granter of the authorization.
+message MsgExec {
+  string grantee = 1;
+  // Execute Msg.
+  // The x/authz will try to find a grant matching (msg.signers[0], grantee, MsgTypeURL(msg))
+  // triple and validate it.
+  repeated google.protobuf.Any msgs = 2;
+}
+
+// MsgGrantResponse defines the Msg/MsgGrant response type.
+message MsgGrantResponse {}
+
+// MsgRevoke revokes any authorization with the provided sdk.Msg type on the
+// granter's account with that has been granted to the grantee.
+message MsgRevoke {
+  string granter      = 1;
+  string grantee      = 2;
+  string msg_type_url = 3;
+}
+
+// MsgRevokeResponse defines the Msg/MsgRevokeResponse response type.
+message MsgRevokeResponse {}
+
+/*
+See: https://github.com/cosmos/cosmos-sdk/blob/main/proto/cosmos/authz/v1beta1/query.proto
+ */
+
+// QueryGrantsRequest is the request type for the Query/Grants RPC method.
+message QueryGrantsRequest {
+  string granter = 1;
+  string grantee = 2;
+  // Optional, msg_type_url, when set, will query only grants matching given msg type.
+  string msg_type_url = 3;
+  // pagination defines an pagination for the request.
+  PageRequest pagination = 4;
+}
+
+// QueryGrantsResponse is the response type for the Query/Authorizations RPC method.
+message QueryGrantsResponse {
+  // authorizations is a list of grants granted for grantee by granter.
+  repeated Grant grants = 1;
+  // pagination defines an pagination for the response.
+  PageResponse pagination = 2;
+}
+
+// QueryGranterGrantsRequest is the request type for the Query/GranterGrants RPC method.
+message QueryGranterGrantsRequest {
+  string granter = 1;
+
+  // pagination defines an pagination for the request.
+  PageRequest pagination = 2;
+}
+
+// QueryGranterGrantsResponse is the response type for the Query/GranterGrants RPC method.
+message QueryGranterGrantsResponse {
+  // grants is a list of grants granted by the granter.
+  repeated GrantAuthorization grants = 1;
+  // pagination defines an pagination for the response.
+  PageResponse pagination = 2;
+}
+
+// QueryGranteeGrantsRequest is the request type for the Query/IssuedGrants RPC method.
+message QueryGranteeGrantsRequest {
+  string grantee = 1;
+
+  // pagination defines an pagination for the request.
+  PageRequest pagination = 2;
+}
+
+// QueryGranteeGrantsResponse is the response type for the Query/GranteeGrants RPC method.
+message QueryGranteeGrantsResponse {
+  // grants is a list of grants granted to the grantee.
+  repeated GrantAuthorization grants = 1;
+  // pagination defines an pagination for the response.
+  PageResponse pagination = 2;
+}
+
+/* CosmWasm
+See: https://github.com/CosmWasm/wasmd/blob/main/proto/cosmwasm/wasm/v1/authz.proto
+ */
+
+// ContractExecutionAuthorization defines authorization for wasm execute.
+// Since: wasmd 0.30
+message ContractExecutionAuthorization {
+  // Grants for contract executions
+  repeated ContractGrant grants = 1;
+}
+
+// ContractMigrationAuthorization defines authorization for wasm contract
+// migration. Since: wasmd 0.30
+message ContractMigrationAuthorization {
+  // Grants for contract migrations
+  repeated ContractGrant grants = 1;
+}
+
+// ContractGrant a granted permission for a single contract
+// Since: wasmd 0.30
+message ContractGrant {
+  // Contract is the bech32 address of the smart contract
+  string contract = 1;
+
+  // Limit defines execution limits that are enforced and updated when the grant
+  // is applied. When the limit lapsed the grant is removed.
+  google.protobuf.Any limit = 2;
+
+  // Filter define more fine-grained control on the message payload passed
+  // to the contract in the operation. When no filter applies on execution, the
+  // operation is prohibited.
+  google.protobuf.Any filter = 3;
+}
+
+// MaxCallsLimit limited number of calls to the contract. No funds transferable.
+// Since: wasmd 0.30
+message MaxCallsLimit {
+  // Remaining number that is decremented on each execution
+  uint64 remaining = 1;
+}
+
+// MaxFundsLimit defines the maximal amounts that can be sent to the contract.
+// Since: wasmd 0.30
+message MaxFundsLimit {
+  // Amounts is the maximal amount of tokens transferable to the contract.
+  repeated Coin amounts = 1;
+}
+
+// CombinedLimit defines the maximal amounts that can be sent to a contract and
+// the maximal number of calls executable. Both need to remain >0 to be valid.
+// Since: wasmd 0.30
+message CombinedLimit {
+  // Remaining number that is decremented on each execution
+  uint64 calls_remaining = 1;
+  // Amounts is the maximal amount of tokens transferable to the contract.
+  repeated Coin amounts = 2;
+}
+
+// AllowAllMessagesFilter is a wildcard to allow any type of contract payload
+// message.
+// Since: wasmd 0.30
+message AllowAllMessagesFilter {}
+
+// AcceptedMessageKeysFilter accept only the specific contract message keys in
+// the json object to be executed.
+// Since: wasmd 0.30
+message AcceptedMessageKeysFilter {
+  // Messages is the list of unique keys
+  repeated string keys = 1;
+}
+
+// AcceptedMessagesFilter accept only the specific raw contract messages to be
+// executed.
+// Since: wasmd 0.30
+message AcceptedMessagesFilter {
+  // Messages is the list of raw contract messages
+  repeated bytes messages = 1;
+}
+
+/*
+Other stuff
+ */
+
+/*
+See: https://github.com/cosmos/cosmos-sdk/blob/main/proto/cosmos/base/query/v1beta1/pagination.proto
+ */
+
+// PageRequest is to be embedded in gRPC request messages for efficient
+// pagination. Ex:
+//
+//  message SomeRequest {
+//          Foo some_parameter = 1;
+//          PageRequest pagination = 2;
+//  }
+message PageRequest {
+  // key is a value returned in PageResponse.next_key to begin
+  // querying the next page most efficiently. Only one of offset or key
+  // should be set.
+  bytes key = 1;
+
+  // offset is a numeric offset that can be used when key is unavailable.
+  // It is less efficient than using key. Only one of offset or key should
+  // be set.
+  uint64 offset = 2;
+
+  // limit is the total number of results to be returned in the result page.
+  // If left empty it will default to a value to be set by each app.
+  uint64 limit = 3;
+
+  // count_total is set to true  to indicate that the result set should include
+  // a count of the total number of items available for pagination in UIs.
+  // count_total is only respected when offset is used. It is ignored when key
+  // is set.
+  bool count_total = 4;
+
+  // reverse is set to true if results are to be returned in the descending order.
+  //
+  // Since: cosmos-sdk 0.43
+  bool reverse = 5;
+}
+
+// PageResponse is to be embedded in gRPC response messages where the
+// corresponding request message has used PageRequest.
+//
+//  message SomeResponse {
+//          repeated Bar results = 1;
+//          PageResponse page = 2;
+//  }
+message PageResponse {
+  // next_key is the key to be passed to PageRequest.key to
+  // query the next page most efficiently. It will be empty if
+  // there are no more results.
+  bytes next_key = 1;
+
+  // total is total number of results available if PageRequest.count_total
+  // was set, its value is undefined otherwise
+  uint64 total = 2;
+}
+
+/*
+See: https://github.com/cosmos/cosmos-sdk/blob/main/proto/cosmos/base/v1beta1/coin.proto
+ */
+
+// Coin defines a token with a denomination and an amount.
+//
+// NOTE: The amount field is an Int which implements the custom method
+// signatures required by gogoproto.
+message Coin {
+  string denom  = 1;
+  string amount = 2;
 }
